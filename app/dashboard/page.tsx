@@ -9,6 +9,7 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 export default function DashboardPage() {
   const [lists, setLists] = useState<any[]>([])
   const [ticked, setTicked] = useState<Record<string, boolean>>({})
+  const [points, setPoints] = useState(0)
   const [ready, setReady] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
@@ -42,6 +43,13 @@ export default function DashboardPage() {
       })).filter(list => list.tasks.length > 0)
 
       setLists(filtered)
+
+      const { count } = await supabase
+        .from('completions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+
+      setPoints(count ?? 0)
       setReady(true)
     }
     init()
@@ -50,7 +58,20 @@ export default function DashboardPage() {
   const tickTask = async (taskId: string) => {
     if (ticked[taskId] || !userId) return
     setTicked(prev => ({ ...prev, [taskId]: true }))
+    setPoints(prev => prev + 1)
     await supabase.from('completions').insert({ task_id: taskId, user_id: userId })
+
+    const allTaskIds = lists.flatMap(l => l.tasks.map((t: any) => t.id))
+    const newTicked = { ...ticked, [taskId]: true }
+    const allDone = allTaskIds.every(id => newTicked[id])
+
+    if (allDone) {
+      await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'All tasks completed for today!' })
+      })
+    }
   }
 
   if (!ready) return (
@@ -66,10 +87,15 @@ export default function DashboardPage() {
           <h1 style={{ fontSize: '18px', fontWeight: '600', color: '#111', margin: 0 }}>TaskFlow</h1>
           <p style={{ fontSize: '13px', color: '#888', margin: 0 }}>{todayName}</p>
         </div>
-        <button onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
-          style={{ fontSize: '13px', color: '#888', background: 'none', border: 'none', cursor: 'pointer' }}>
-          Sign out
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '4px 12px', fontSize: '13px', fontWeight: '600', color: '#16a34a' }}>
+            ⭐ {points} pts
+          </div>
+          <button onClick={() => supabase.auth.signOut().then(() => router.push('/login'))}
+            style={{ fontSize: '13px', color: '#888', background: 'none', border: 'none', cursor: 'pointer' }}>
+            Sign out
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: '1.25rem' }}>
