@@ -26,11 +26,16 @@ export default function DashboardPage() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('business_id')
+        .select('business_id, role')
         .eq('id', user.id)
         .single()
 
       if (!profile?.business_id) { setReady(true); return }
+
+      if (profile.role === 'admin') {
+        router.push('/admin')
+        return
+      }
 
       const { data: listsData } = await supabase
         .from('lists')
