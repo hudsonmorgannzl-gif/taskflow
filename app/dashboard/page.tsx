@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const [lists, setLists] = useState<any[]>([])
   const [ticked, setTicked] = useState<Record<string, boolean>>({})
   const [points, setPoints] = useState(0)
+  const [notified, setNotified] = useState<Record<string, boolean>>({})
   const [ready, setReady] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
@@ -55,21 +56,20 @@ export default function DashboardPage() {
     init()
   }, [router, today])
 
-  const tickTask = async (taskId: string) => {
+  const tickTask = async (taskId: string, listId: string, listName: string, listTaskIds: string[]) => {
     if (ticked[taskId] || !userId) return
-    setTicked(prev => ({ ...prev, [taskId]: true }))
+    const newTicked = { ...ticked, [taskId]: true }
+    setTicked(newTicked)
     setPoints(prev => prev + 1)
     await supabase.from('completions').insert({ task_id: taskId, user_id: userId })
 
-    const allTaskIds = lists.flatMap(l => l.tasks.map((t: any) => t.id))
-    const newTicked = { ...ticked, [taskId]: true }
-    const allDone = allTaskIds.every(id => newTicked[id])
-
-    if (allDone) {
+    const allDone = listTaskIds.every(id => newTicked[id])
+    if (allDone && !notified[listId]) {
+      setNotified(prev => ({ ...prev, [listId]: true }))
       await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: 'All tasks completed for today!' })
+        body: JSON.stringify({ listName })
       })
     }
   }
@@ -103,40 +103,49 @@ export default function DashboardPage() {
           <p style={{ color: '#888', textAlign: 'center', marginTop: '3rem' }}>No tasks for today!</p>
         )}
 
-        {lists.map(list => (
-          <div key={list.id} style={{ marginBottom: '1.5rem' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: '600', color: '#555', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
-              {list.name}
-            </h2>
+        {lists.map(list => {
+          const listTaskIds = list.tasks.map((t: any) => t.id)
+          return (
+            <div key={list.id} style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: '600', color: '#555', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>
+                {list.name}
+              </h2>
 
-            {list.tasks.map((task: any) => {
-              const done = ticked[task.id]
-              return (
-                <button key={task.id} onClick={() => tickTask(task.id)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
-                    padding: '14px 16px', marginBottom: '8px',
-                    background: done ? '#f0fdf4' : 'white',
-                    border: done ? '1px solid #bbf7d0' : '1px solid #e5e7eb',
-                    borderRadius: '12px', cursor: done ? 'default' : 'pointer',
-                    textAlign: 'left'
-                  }}>
-                  <div style={{
-                    width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
-                    border: done ? 'none' : '2px solid #d1d5db',
-                    background: done ? '#16a34a' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    {done && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
-                  </div>
-                  <span style={{ fontSize: '16px', color: done ? '#16a34a' : '#111', fontWeight: '500', textDecoration: done ? 'line-through' : 'none' }}>
-                    {task.title}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        ))}
+              {list.tasks.map((task: any) => {
+                const done = ticked[task.id]
+                return (
+                  <button key={task.id} onClick={() => tickTask(task.id, list.id, list.name, listTaskIds)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
+                      padding: '14px 16px', marginBottom: '8px',
+                      background: done ? '#f0fdf4' : 'white',
+                      border: done ? '1px solid #bbf7d0' : '1px solid #e5e7eb',
+                      borderRadius: '12px', cursor: done ? 'default' : 'pointer',
+                      textAlign: 'left'
+                    }}>
+                    <div style={{
+                      width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
+                      border: done ? 'none' : '2px solid #d1d5db',
+                      background: done ? '#16a34a' : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      {done && <span style={{ color: 'white', fontSize: '14px' }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: '16px', color: done ? '#16a34a' : '#111', fontWeight: '500', textDecoration: done ? 'line-through' : 'none' }}>
+                      {task.title}
+                    </span>
+                  </button>
+                )
+              })}
+
+              {notified[list.id] && (
+                <p style={{ fontSize: '13px', color: '#16a34a', textAlign: 'center', marginTop: '8px' }}>
+                  ✅ List complete — admin notified!
+                </p>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
